@@ -2,35 +2,29 @@ from dotenv import load_dotenv
 
 from livekit import agents, rtc
 from livekit.agents import AgentSession, Agent, room_io
-from livekit.plugins import noise_cancellation, silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
+from livekit.plugins import google, noise_cancellation
+from google.genai import types
+
+from instructions import FULL_INSTRUCTIONS, GREETING_INSTRUCTION
 
 load_dotenv(".env")
-
-
-class Assistant(Agent):
-    def __init__(self) -> None:
-        super().__init__(
-            instructions="""You are a helpful voice AI assistant.
-            You eagerly assist users with their questions by providing information from your extensive knowledge.
-            Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols.
-            You are curious, friendly, and have a sense of humor.""",
-        )
 
 
 async def entrypoint(ctx: agents.JobContext):
     """Main entrypoint for the Truliv voice agent"""
     session = AgentSession(
-        stt="assemblyai/universal-streaming:en",
-        llm="google/gemini-2.5-flash",
-        tts="cartesia/sonic-3:9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
-        vad=silero.VAD.load(),
-        turn_detection=MultilingualModel(),
+        llm=google.realtime.RealtimeModel(
+            model="gemini-2.5-flash-native-audio-preview-12-2025",
+            voice="Puck",
+            temperature=0.85,
+            instructions=FULL_INSTRUCTIONS,
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        ),
     )
 
     await session.start(
         room=ctx.room,
-        agent=Assistant(),
+        agent=Agent(instructions=FULL_INSTRUCTIONS),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(
                 noise_cancellation=lambda params: noise_cancellation.BVCTelephony() if params.participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP else noise_cancellation.BVC(),
@@ -39,7 +33,7 @@ async def entrypoint(ctx: agents.JobContext):
     )
 
     await session.generate_reply(
-        instructions="Greet the user and offer your assistance."
+        instructions=GREETING_INSTRUCTION
     )
 
 
